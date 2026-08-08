@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { toPng } from "html-to-image";
+import jsPDF from "jspdf";
 import ImageUpload from "../components/ImageUpload";
 
 const scrapbookTemplates = [
@@ -110,18 +111,60 @@ export default function GeneratePage() {
   };
 
   const downloadScrapbook = async () => {
-    if (!scrapbookRef.current) return;
+  if (!scrapbookRef.current) return;
 
-    const dataUrl = await toPng(scrapbookRef.current, {
-      cacheBust: true,
-      pixelRatio: 3,
-    });
+  const dataUrl = await toPng(scrapbookRef.current, {
+    cacheBust: true,
+    pixelRatio: 2,
+  });
 
-    const link = document.createElement("a");
-    link.download = "Memora-Scrapbook.png";
-    link.href = dataUrl;
-    link.click();
+  const img = new Image();
+
+  img.onload = () => {
+    const pdf = new jsPDF("p", "mm", "a4");
+
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+
+    const imgWidth = pageWidth;
+    const imgHeight = (img.height * imgWidth) / img.width;
+
+    let heightLeft = imgHeight;
+    let position = 0;
+
+    pdf.addImage(
+      dataUrl,
+      "PNG",
+      0,
+      position,
+      imgWidth,
+      imgHeight
+    );
+
+    heightLeft -= pageHeight;
+
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight;
+
+      pdf.addPage();
+
+      pdf.addImage(
+        dataUrl,
+        "PNG",
+        0,
+        position,
+        imgWidth,
+        imgHeight
+      );
+
+      heightLeft -= pageHeight;
+    }
+
+    pdf.save("Memora-Scrapbook.pdf");
   };
+
+  img.src = dataUrl;
+};
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-50 to-pink-50 py-10">

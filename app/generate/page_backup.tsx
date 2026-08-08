@@ -1,7 +1,7 @@
 "use client";
-import { toPng } from "html-to-image";
-import jsPDF from "jspdf";
+
 import { useRef, useState } from "react";
+import { toPng } from "html-to-image";
 import ImageUpload from "../components/ImageUpload";
 
 const scrapbookTemplates = [
@@ -9,45 +9,37 @@ const scrapbookTemplates = [
     title: "🌍 Journey to the Clouds",
     quote:
       "Some places stay in our camera. The best ones stay in our hearts.",
-    story:
-      "Every journey begins with a dream. These memories remind us that the most beautiful destinations are the ones we experience together.",
   },
   {
     title: "🏖️ Waves of Happiness",
     quote:
       "Life is better with sandy feet and happy hearts.",
-    story:
-      "The sound of the waves, the warmth of the sun and the laughter shared made every moment unforgettable.",
   },
   {
     title: "❤️ Moments with Family",
     quote:
       "Family is where life's greatest memories begin.",
-    story:
-      "The most valuable memories are not about places but about the people beside us.",
   },
 ];
 
 export default function GeneratePage() {
-  const coverRef = useRef<HTMLDivElement>(null);
-const collageRef = useRef<HTMLDivElement>(null);
-const storyRef = useRef<HTMLDivElement>(null);
-const thankYouRef = useRef<HTMLDivElement>(null);
+  const scrapbookRef = useRef<HTMLDivElement>(null);
 
   const [images, setImages] = useState<File[]>([]);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
 
-  const [loading, setLoading] = useState(false);
-  const [showPayment, setShowPayment] = useState(false);
-  const [showScrapbook, setShowScrapbook] = useState(false);
-
   const [memoryPrompt, setMemoryPrompt] = useState("");
   const [aiStory, setAiStory] = useState("");
 
-  const [template, setTemplate] =
-    useState(scrapbookTemplates[0]);
+  const [loading, setLoading] = useState(false);
 
-  const price = images.length * 5;
+  const [showPayment, setShowPayment] = useState(false);
+
+  const [showScrapbook, setShowScrapbook] = useState(false);
+
+  const [template, setTemplate] = useState(scrapbookTemplates[0]);
+
+  const price = images.length * 1;
 
   const addImage = (file: File) => {
     if (images.length >= 5) {
@@ -68,450 +60,326 @@ const thankYouRef = useRef<HTMLDivElement>(null);
 
     reader.readAsDataURL(file);
   };
-    const generateScrapbook = () => {
+
+  const generateScrapbook = () => {
     if (images.length === 0) {
       alert("Upload at least one photo.");
       return;
     }
 
     if (!memoryPrompt.trim()) {
-      alert("Please tell about your memories.");
+      alert("Tell us about your memories.");
       return;
     }
 
     setShowPayment(true);
   };
- const downloadScrapbook = () => {
-  window.print();
-};
+
+  const generateStory = async () => {
+    setShowPayment(false);
+    setLoading(true);
+
+    try {
+      const response = await fetch("/api/generate-story", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          memoryPrompt,
+        }),
+      });
+
+      const data = await response.json();
+
+      setAiStory(data.story);
+
+      setTemplate(
+        scrapbookTemplates[
+          Math.floor(Math.random() * scrapbookTemplates.length)
+        ]
+      );
+
+      setShowScrapbook(true);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to generate story.");
+    }
+
+    setLoading(false);
+  };
+
+  const downloadScrapbook = async () => {
+    if (!scrapbookRef.current) return;
+
+    const dataUrl = await toPng(scrapbookRef.current, {
+      cacheBust: true,
+      pixelRatio: 3,
+    });
+
+    const link = document.createElement("a");
+    link.download = "Memora-Scrapbook.png";
+    link.href = dataUrl;
+    link.click();
+  };
+
   return (
-    <main className="min-h-screen bg-white py-10">
-      <h1 className="text-5xl font-extrabold text-center text-blue-700">
+    <main className="min-h-screen bg-gradient-to-br from-blue-50 to-pink-50 py-10">
+
+      <h1 className="text-5xl font-black text-center text-blue-700">
         📖 Memora
       </h1>
 
       <p className="text-center text-gray-600 mt-3 text-lg">
-        Upload your memories and let us create your scrapbook.
+        Upload your memories and let us create a beautiful scrapbook.
       </p>
 
       <div className="max-w-4xl mx-auto mt-10">
 
         <ImageUpload onImageSelected={addImage} />
 
-        <div className="mt-8 bg-white rounded-3xl shadow-xl border border-blue-200 p-6">
+        <div className="bg-white mt-8 rounded-3xl shadow-xl p-6">
 
-          <label className="block text-2xl font-bold text-gray-800 mb-4">
-            ✍️ Tell about these memories
-          </label>
+          <label className="block mb-4 text-3xl font-extrabold text-gray-900">
+  ✍️ Tell about your memories
+</label>
 
           <textarea
-  value={memoryPrompt}
-  onChange={(e) => setMemoryPrompt(e.target.value)}
-  placeholder="Happy memories..."
-  className="w-full h-44 rounded-2xl border-2 border-blue-300 p-5 text-lg text-gray-800 placeholder:text-gray-500 placeholder:font-medium"
-/>
+            value={memoryPrompt}
+            onChange={(e) => setMemoryPrompt(e.target.value)}
+            placeholder="Write your beautiful memories..."
+            className="w-full h-44 rounded-2xl border-2 border-blue-300 p-5 text-lg text-gray-800"
+          />
 
         </div>
-                <div className="mt-8 bg-white rounded-3xl shadow-xl border border-green-200 p-6">
+
+        <div className="bg-white mt-8 rounded-3xl shadow-xl p-6">
 
           <h2 className="text-2xl font-bold text-center text-blue-700">
             📷 Uploaded Photos
           </h2>
 
-          <p className="mt-4 text-center text-xl font-semibold text-gray-700">
+          <p className="text-center text-xl font-bold mt-4 text-gray-800">
             {images.length} / 5 Photos
           </p>
 
-          <div className="mt-6 flex flex-wrap justify-center gap-4">
+          <div className="flex flex-wrap justify-center gap-4 mt-6">
+
             {imageUrls.map((url, index) => (
               <img
                 key={index}
                 src={url}
-                alt={`preview-${index}`}
-                className="w-24 h-24 rounded-xl object-cover shadow-lg border-2 border-white"
+                className="w-28 h-28 rounded-xl object-cover border-4 border-white shadow-lg"
               />
             ))}
+
           </div>
 
-          <div className="mt-8 text-center">
-            <h2 className="text-4xl font-extrabold text-green-600">
-              ₹{price}
-            </h2>
-
-            <p className="text-gray-500 mt-2">
-              ₹1 per uploaded photo
-            </p>
-          </div>
+          <h2 className="text-center text-5xl font-black text-green-600 mt-8">
+            ₹{price}
+          </h2>
 
         </div>
 
         <button
           onClick={generateScrapbook}
-          disabled={loading}
-          className="mt-8 w-full bg-blue-600 hover:bg-blue-700 text-white text-xl font-bold rounded-2xl p-4 transition-all"
+          className="w-full mt-8 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl py-4 text-xl font-bold"
         >
-          {loading
-            ? "🤖 Creating Scrapbook..."
-            : `💳 Pay ₹${price} & Generate Scrapbook`}
+          💳 Pay ₹{price} & Generate Scrapbook
         </button>
-
-        {showPayment && (
+                {showPayment && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
 
             <div className="bg-white rounded-3xl shadow-2xl p-8 w-[380px]">
 
               <h2 className="text-3xl font-bold text-center text-blue-700">
-                💳 Memora
+                💳 Memora Payment
               </h2>
 
               <p className="text-center text-gray-500 mt-3">
                 Secure Payment Gateway
               </p>
 
-              <div className="mt-8 text-center">
+              <h1 className="text-5xl font-black text-center text-green-600 mt-8">
+                ₹{price}
+              </h1>
 
-                <h1 className="text-5xl font-bold text-green-600">
-                  ₹{price}
-                </h1>
+              <select className="w-full mt-6 border rounded-xl p-3">
+                <option>💳 Credit / Debit Card</option>
+                <option>📱 UPI</option>
+                <option>🏦 Net Banking</option>
+              </select>
 
-                <select className="w-full mt-6 border rounded-xl p-3">
-                  <option>💳 Credit / Debit Card</option>
-                  <option>📱 UPI</option>
-                  <option>🏦 Net Banking</option>
-                </select>
-
-              </div>
-                            <button
-                onClick={async () => {
-                  setShowPayment(false);
-                  setLoading(true);
-
-                  try {
-                    const response = await fetch("/api/generate-story", {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify({
-                        memoryPrompt,
-                      }),
-                    });
-
-                    const data = await response.json();
-
-                    setAiStory(data.story);
-
-                    const randomTemplate =
-                      scrapbookTemplates[
-                        Math.floor(Math.random() * scrapbookTemplates.length)
-                      ];
-
-                    setTemplate(randomTemplate);
-
-                    setShowScrapbook(true);
-
-                  } catch (error) {
-                    console.error(error);
-                    alert("Failed to generate story.");
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
-                className="w-full mt-8 bg-green-600 hover:bg-green-700 text-white p-4 rounded-xl text-xl font-bold"
+              <button
+                onClick={generateStory}
+                disabled={loading}
+                className="w-full mt-8 bg-green-600 hover:bg-green-700 text-white py-4 rounded-2xl text-xl font-bold"
               >
-                ✅ Pay Now
+                {loading ? "Generating..." : "✅ Pay Now"}
               </button>
 
               <button
                 onClick={() => setShowPayment(false)}
-                className="w-full mt-3 border border-gray-300 rounded-xl p-3"
+                className="w-full mt-4 border rounded-2xl py-3"
               >
                 Cancel
               </button>
 
             </div>
+
           </div>
         )}
 
         {showScrapbook && (
+
           <div
-  ref={collageRef}
-  className="relative mt-16 bg-gradient-to-br from-[#fffaf0] via-[#fff5ec] to-[#fff8f3] rounded-[40px] shadow-2xl border-[8px] border-yellow-300 p-10 max-w-5xl mx-auto overflow-hidden"
->
-  {/* Scrapbook Decorations */}
-
-<div className="absolute top-6 left-6 text-5xl">🌸</div>
-
-<div className="absolute top-10 right-10 text-5xl">✨</div>
-
-<div className="absolute bottom-10 left-10 text-5xl">🍃</div>
-
-<div className="absolute bottom-8 right-8 text-5xl">❤️</div>
-
-<div className="absolute top-1/2 left-3 text-4xl">📷</div>
-
-<div className="absolute top-1/2 right-3 text-4xl">🎀</div>
+            ref={scrapbookRef}
+            className="max-w-5xl mx-auto mt-16 bg-gradient-to-br from-[#fffaf0] via-[#fff5ec] to-[#fff8f3] rounded-[40px] border-[8px] border-yellow-300 shadow-2xl p-12"
+          >
 
             {/* COVER PAGE */}
 
-            {/* COVER PAGE */}
+            <div className="relative bg-pink-100 rounded-3xl border-4 border-yellow-300 shadow-xl p-14 text-center">
 
-{/* COVER PAGE */}
+              <div className="absolute top-5 left-5 text-5xl">🌸</div>
+              <div className="absolute top-5 right-5 text-5xl">✨</div>
+              <div className="absolute bottom-5 left-5 text-5xl">📸</div>
+              <div className="absolute bottom-5 right-5 text-5xl">❤️</div>
 
-<div ref={coverRef}>
+              <h1 className="text-7xl font-black text-pink-700">
+                📖 MEMORA
+              </h1>
 
-<div className="bg-pink-100 rounded-3xl shadow-xl p-12 text-center border-4 border-yellow-300"></div>
+              <p className="text-3xl font-bold mt-5 text-gray-700">
+                My Memory Scrapbook
+              </p>
 
-  {/* Decorations */}
+              <div className="text-7xl mt-8">
+                🌸 📸 🌸
+              </div>
 
-  <div className="absolute top-6 left-8 text-6xl">🌸</div>
-  <div className="absolute top-8 right-8 text-6xl">✨</div>
-  <div className="absolute bottom-8 left-8 text-6xl">📸</div>
-  <div className="absolute bottom-8 right-8 text-6xl">❤️</div>
+              <div className="bg-white rounded-3xl shadow-lg p-8 mt-10">
 
-  <h1 className="text-7xl font-black text-pink-700 drop-shadow-lg">
-    📖 MEMORA
-  </h1>
+                <p className="italic text-2xl text-gray-700">
+                  "{template.quote}"
+                </p>
 
-  <p className="mt-6 text-3xl font-bold text-gray-700">
-    My Memory Scrapbook
-  </p>
+              </div>
 
-  <div className="mt-12 text-8xl">
-    🌸 📸 🌸
-  </div>
-
-  <div className="mt-14 bg-white/80 rounded-3xl p-8 shadow-xl">
-
-    <p className="italic text-2xl text-gray-700">
-      "{template.quote}"
-    </p>
-
-  </div>
-
-  <div className="mt-14 border-t-2 border-dashed border-pink-300 pt-8">
-
-    <p className="text-xl font-semibold text-gray-600">
-      Created with ❤️ using Memora
-    </p>
-
-    <p className="mt-2 text-gray-500">
-      {new Date().toLocaleDateString()}
-    </p>
-
-  </div>
+              <p className="text-gray-500 mt-8">
+                {new Date().toLocaleDateString()}
+              </p>
 
             </div>
 
-            <div className="h-20"></div>
-            {/* PHOTO COLLAGE */}
-            <div className="text-center mb-14">
-  <h2 className="text-5xl font-extrabold text-pink-700">
-    📸 Our Beautiful Memories
-  </h2>
+            {/* PHOTO TITLE */}
 
-  <p className="mt-4 text-gray-600 italic text-xl">
-    Every picture tells a story...
-  </p>
-
-  <div className="mt-5 text-3xl">
-    🌸 ✨ 💖 ✨ 🌸
-  </div>
-</div>
-
-<div
-  className={`relative ${
+           <div
+  className={`mt-12 gap-8 justify-items-center ${
     imageUrls.length === 1
-      ? "min-h-[520px]"
+      ? "grid grid-cols-1"
       : imageUrls.length === 2
-      ? "min-h-[550px]"
+      ? "grid grid-cols-2"
       : imageUrls.length === 3
-      ? "min-h-[700px]"
+      ? "grid grid-cols-2"
       : imageUrls.length === 4
-      ? "min-h-[850px]"
-      : "min-h-[950px]"
+      ? "grid grid-cols-2"
+      : "grid grid-cols-2 md:grid-cols-3"
   }`}
 >
+  {imageUrls.map((url, index) => (
+    <div
+      key={index}
+      className={`bg-white rounded-2xl shadow-xl p-4 rotate-[-2deg]
+      ${
+        imageUrls.length === 1
+          ? "w-[420px]"
+          : imageUrls.length === 2
+          ? "w-[320px]"
+          : "w-full"
+      }`}
+    >
+      <div className="text-center text-4xl -mt-8">
+        📍
+      </div>
 
-  {imageUrls.map((url, index) => {
+      <img
+        src={url}
+        alt=""
+        className={`rounded-xl object-cover w-full ${
+          imageUrls.length === 1
+            ? "h-[420px]"
+            : imageUrls.length === 2
+            ? "h-[320px]"
+            : "h-60"
+        }`}
+      />
 
-    const layoutMap: Record<number, string[]> = {
-  1: [
-    "top-20 left-1/2 -translate-x-1/2",
-  ],
-
-  2: [
-    "top-20 left-10",
-    "top-20 right-10",
-  ],
-
-  3: [
-    "top-0 left-1/2 -translate-x-1/2",
-    "top-[320px] left-10",
-    "top-[320px] right-10",
-  ],
-
-  4: [
-    "top-0 left-10",
-    "top-0 right-10",
-    "top-[340px] left-10",
-    "top-[340px] right-10",
-  ],
-
-  5: [
-    "top-0 left-4 rotate-[-8deg]",
-    "top-8 right-6 rotate-[8deg]",
-    "top-[320px] left-20 rotate-[-6deg]",
-    "top-[380px] right-10 rotate-[6deg]",
-    "top-[680px] left-1/2 -translate-x-1/2 rotate-[2deg]",
-  ],
-};
-
-const layouts = layoutMap[imageUrls.length];
-
-    const tapeColors = [
-      "bg-yellow-200",
-      "bg-pink-200",
-      "bg-blue-200",
-      "bg-green-200",
-      "bg-orange-200",
-    ];
-
-    return (
-
-      <div
-        key={index}
-       className={`absolute ${
-  imageUrls.length === 1
-    ? "top-10 left-1/2 -translate-x-1/2 w-[600px]"
-    : layouts[index] + " w-72"
-}
-bg-white
-p-4
-rounded-xl
-border-4
-border-white
-shadow-[0_15px_35px_rgba(0,0,0,0.25)]
-hover:scale-105
-hover:rotate-0
-transition-all
-duration-500`}
-       
-      >
-
-        {/* Tape */}
-
-       {/* Push Pin */}
-
-<div className="absolute -top-5 left-1/2 -translate-x-1/2 text-5xl z-20">
-  📍
+      <p className="text-center mt-4 italic text-pink-600">
+        Beautiful Moment ❤️
+      </p>
+    </div>
+  ))}
 </div>
+            {/* STORY */}
 
-<div className="bg-white rounded-lg border border-gray-200 shadow-xl p-4">
+            <div className="mt-20 bg-[#fffaf0] rounded-3xl border-4 border-yellow-300 shadow-xl p-12">
 
-  <img
-    src={url}
-    className={`w-full ${
-  imageUrls.length === 1 ? "h-[450px]" : "h-56"
-}
-rounded-lg
-object-cover
-border-2
-border-gray-100`}
-  />
+              <h2 className="text-center text-5xl font-black text-pink-700">
+                📖 Memories to Cherish
+              </h2>
 
-  <div className="mt-5 text-center">
+              <p className="text-center mt-3 text-gray-600">
+                Written by Memora ❤️
+              </p>
 
-   <p className="mt-3 text-center font-handwriting text-lg text-pink-600">
-Beautiful Moment
-</p>
+              <div className="bg-white rounded-2xl shadow-lg p-10 mt-10">
 
-    <p className="text-gray-900 italic mt-2">
-      Captured Forever
-    </p>
+                <p className="text-xl leading-10 text-gray-700 whitespace-pre-line">
+                  {aiStory}
+                </p>
 
-  </div>
+              </div>
 
-</div>
+            </div>
 
-        <p className="mt-4 text-center italic text-gray-700 font-semibold">
-        </p>
+            {/* THANK YOU */}
+
+            <div className="mt-20 bg-pink-100 rounded-3xl shadow-xl p-16 text-center">
+
+              <div className="text-7xl">
+                ❤️
+              </div>
+
+              <h2 className="text-5xl font-black text-pink-700 mt-6">
+                Thank You
+              </h2>
+
+              <p className="text-2xl mt-6 text-gray-700">
+                Every memory deserves a beautiful story.
+              </p>
+
+            </div>
+
+          </div>
+
+        )}
+
+        {showScrapbook && (
+
+          <button
+            onClick={downloadScrapbook}
+            className="w-full mt-10 bg-green-600 hover:bg-green-700 text-white text-2xl font-bold py-5 rounded-2xl shadow-xl transition"
+          >
+            📸 Download Scrapbook (PNG)
+          </button>
+
+        )}
 
       </div>
 
-    );
+    </main>
 
-  })}
+  );
 
-</div>
-
-<div className="flex justify-center my-20 text-5xl">
-  🌸 ✨ ❤️ 🌸 ✨
-</div>
-
-{/* STORY */}
-
-<div className="bg-[#fffaf0] rounded-3xl border-4 border-yellow-300 shadow-2xl p-12 relative overflow-hidden">
-
-  <div className="absolute top-5 left-5 text-5xl">🌸</div>
-  <div className="absolute top-5 right-5 text-5xl">✨</div>
-  <div className="absolute bottom-5 left-5 text-5xl">❤️</div>
-  <div className="absolute bottom-5 right-5 text-5xl">🌼</div>
-
-  <h2 className="text-5xl font-extrabold text-center text-pink-700">
-    📖 Memories to Cherish
-  </h2>
-
-  <p className="text-center italic text-gray-500 mt-4">
-    Written by Memora❤️
-  </p>
-
-  <div className="mt-10 bg-white rounded-2xl shadow-lg p-10 border-l-8 border-pink-300">
-
-    <p className="text-xl leading-10 text-gray-700 italic whitespace-pre-line">
-      {aiStory || template.story}
-    </p>
-
-  </div>
-
-</div>
-
-{/* THANK YOU */}
-
-<div className="mt-20 bg-pink-100 rounded-3xl p-16 text-center shadow-xl">
-
-  <div className="text-7xl">
-    ❤️
-  </div>
-
-  <h2 className="text-5xl font-extrabold text-pink-700 mt-6">
-    Thank You
-  </h2>
-
-  <p className="text-2xl mt-6 text-gray-700">
-    Every Memory deserves a Beautiful Story.
-  </p>
-
-  <p className="italic mt-10 text-xl text-gray-500">
-    Created with ❤️ using Memora
-  </p>
-
-</div>
-
-<button
-  onClick={downloadScrapbook}
-  className="mt-12 w-full bg-green-600 text-white text-2xl font-bold py-5 rounded-2xl shadow-xl hover:scale-105 transition"
->
-  📄 Save Scrapbook as PDF
-
-</button>
-
-</div>
-)}
-
-</div>
-
-</main>
-);
-}
-          
+}         
