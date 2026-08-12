@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { toPng } from "html-to-image";
+import jsPDF from "jspdf";
 import ImageUpload from "../components/ImageUpload";
 
 const scrapbookTemplates = [
@@ -109,22 +110,68 @@ export default function GeneratePage() {
     setLoading(false);
   };
 
-  const downloadScrapbook = async () => {
-    if (!scrapbookRef.current) return;
+ const downloadScrapbook = async () => {
+  const pdf = new jsPDF("p", "mm", "a4");
 
-    const dataUrl = await toPng(scrapbookRef.current, {
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+
+  const pages = [
+    "cover-page",
+    "photos-page",
+    "story-page",
+    "thank-you-page",
+  ];
+
+  for (let i = 0; i < pages.length; i++) {
+    const element = document.getElementById(pages[i]);
+
+    if (!element) continue;
+
+    const dataUrl = await toPng(element, {
       cacheBust: true,
-      pixelRatio: 3,
+      pixelRatio: 2,
     });
 
-    const link = document.createElement("a");
-    link.download = "Memora-Scrapbook.png";
-    link.href = dataUrl;
-    link.click();
-  };
+    const img = new Image();
 
+    await new Promise<void>((resolve) => {
+      img.onload = () => resolve();
+      img.src = dataUrl;
+    });
+
+    const imgRatio = img.width / img.height;
+
+    let imgWidth = pageWidth;
+    let imgHeight = imgWidth / imgRatio;
+
+    // Fit the section inside one A4 page
+    if (imgHeight > pageHeight) {
+      imgHeight = pageHeight;
+      imgWidth = imgHeight * imgRatio;
+    }
+
+    const x = (pageWidth - imgWidth) / 2;
+    const y = (pageHeight - imgHeight) / 2;
+
+    if (i > 0) {
+      pdf.addPage();
+    }
+
+    pdf.addImage(
+      dataUrl,
+      "PNG",
+      x,
+      y,
+      imgWidth,
+      imgHeight
+    );
+  }
+
+  pdf.save("Memora-Scrapbook.pdf");
+};
   return (
-    <main className="min-h-screen bg-gradient-to-br from-blue-50 to-pink-50 py-10">
+    <main className="min-h-screen overflow-x-hidden bg-gradient-to-br from-blue-50 to-pink-50 py-10">
 
       <h1 className="text-5xl font-black text-center text-blue-700">
         📖 Memora
@@ -234,133 +281,309 @@ export default function GeneratePage() {
 
           <div
             ref={scrapbookRef}
-            className="max-w-5xl mx-auto mt-16 bg-gradient-to-br from-[#fffaf0] via-[#fff5ec] to-[#fff8f3] rounded-[40px] border-[8px] border-yellow-300 shadow-2xl p-12"
+            className="w-full max-w-5xl mx-auto mt-16 bg-gradient-to-br from-[#fffaf0] via-[#fff5ec] to-[#fff8f3] rounded-[40px] border-[8px] border-yellow-300 shadow-2xl p-4 sm:p-12"
           >
 
             {/* COVER PAGE */}
 
-            <div className="relative bg-pink-100 rounded-3xl border-4 border-yellow-300 shadow-xl p-14 text-center">
+            {/* COVER PAGE */}
 
-              <div className="absolute top-5 left-5 text-5xl">🌸</div>
-              <div className="absolute top-5 right-5 text-5xl">✨</div>
-              <div className="absolute bottom-5 left-5 text-5xl">📸</div>
-              <div className="absolute bottom-5 right-5 text-5xl">❤️</div>
+<div
+  id="cover-page"
+  className="relative overflow-hidden bg-[#d8b27a] rounded-[28px] border-[6px] border-[#8b5e34] shadow-2xl p-8 sm:p-12 md:p-16 text-center min-h-[650px] flex flex-col items-center justify-center"
+>
+  {/* Decorative background */}
+  <div className="absolute -top-10 -left-10 text-7xl opacity-70">
+    🌸
+  </div>
 
-              <h1 className="text-7xl font-black text-pink-700">
-                📖 MEMORA
-              </h1>
+  <div className="absolute top-8 right-8 text-5xl opacity-80">
+    ✨
+  </div>
 
-              <p className="text-3xl font-bold mt-5 text-gray-700">
-                My Memory Scrapbook
-              </p>
+  <div className="absolute bottom-8 left-8 text-5xl opacity-70">
+    📸
+  </div>
 
-              <div className="text-7xl mt-8">
-                🌸 📸 🌸
-              </div>
+  <div className="absolute -bottom-8 -right-8 text-7xl opacity-70">
+    ❤️
+  </div>
 
-              <div className="bg-white rounded-3xl shadow-lg p-8 mt-10">
+  {/* Small badge */}
 
-                <p className="italic text-2xl text-gray-700">
-                  "{template.quote}"
-                </p>
+  <div className="relative bg-white/80 border-2 border-pink-200 rounded-full px-6 py-2 shadow-md mb-6">
+    <p className="text-sm sm:text-base font-bold tracking-[0.2em] text-pink-600 uppercase">
+      A Story Worth Remembering
+    </p>
+  </div>
 
-              </div>
+  {/* Logo */}
 
-              <p className="text-gray-500 mt-8">
-                {new Date().toLocaleDateString()}
-              </p>
+  <div className="relative text-6xl sm:text-7xl mb-4">
+    📖
+  </div>
 
-            </div>
+  {/* Main title */}
+
+  <h1 className="relative text-5xl sm:text-6xl md:text-7xl font-black tracking-tight text-pink-700">
+    MEMORA
+  </h1>
+
+  <div className="mt-3 flex items-center gap-3 text-pink-400 text-2xl">
+    <span>🌸</span>
+    <span>•</span>
+    <span>✨</span>
+    <span>•</span>
+    <span>🌸</span>
+  </div>
+
+  <p className="relative text-xl sm:text-2xl md:text-3xl font-bold mt-6 text-gray-700">
+    My Memory Scrapbook
+  </p>
+
+  <p className="italic text-lg sm:text-xl md:text-2xl text-[#5c4632] leading-9 font-serif">
+    A beautiful collection of moments, stories, laughter,
+    and memories that deserve to live forever.
+  </p>
+
+  {/* Quote card */}
+
+  <div className="relative w-full max-w-2xl bg-[#f7edcf] rounded-xl shadow-xl border-2 border-[#c9a66b] p-6 sm:p-8 mt-10 rotate-[-1deg]">
+    <div className="text-4xl mb-3">
+      💕
+    </div>
+
+    <p className="italic text-lg sm:text-xl md:text-2xl text-gray-700 leading-9">
+      "{template.quote}"
+    </p>
+  </div>
+
+  {/* Date */}
+
+  <div className="relative mt-8 bg-pink-600 text-white rounded-full px-6 py-2 shadow-lg">
+    <p className="font-semibold">
+      📅 {new Date().toLocaleDateString()}
+    </p>
+  </div>
+
+</div>
+             
 
             {/* PHOTO TITLE */}
 
-           <div
-  className={`mt-12 gap-8 justify-items-center ${
-    imageUrls.length === 1
-      ? "grid grid-cols-1"
-      : imageUrls.length === 2
-      ? "grid grid-cols-2"
-      : imageUrls.length === 3
-      ? "grid grid-cols-2"
-      : imageUrls.length === 4
-      ? "grid grid-cols-2"
-      : "grid grid-cols-2 md:grid-cols-3"
-  }`}
+<div
+  id="photos-page"
+  className="mt-12 bg-white/70 rounded-[32px] border-4 border-yellow-200 shadow-xl p-6 sm:p-10"
 >
-  {imageUrls.map((url, index) => (
-    <div
-      key={index}
-      className={`bg-white rounded-2xl shadow-xl p-4 rotate-[-2deg]
-      ${
-        imageUrls.length === 1
-          ? "w-[420px]"
-          : imageUrls.length === 2
-          ? "w-[320px]"
-          : "w-full"
-      }`}
-    >
-      <div className="text-center text-4xl -mt-8">
-        📍
-      </div>
+  <div className="text-center mb-10">
+    <p className="text-pink-500 font-bold tracking-[0.2em] uppercase text-sm">
+      Little Pieces of Happiness
+    </p>
 
-      <img
-        src={url}
-        alt=""
-        className={`rounded-xl object-cover w-full ${
-          imageUrls.length === 1
-            ? "h-[420px]"
-            : imageUrls.length === 2
-            ? "h-[320px]"
-            : "h-60"
-        }`}
-      />
+    <h2 className="text-4xl sm:text-5xl font-black text-pink-700 mt-2">
+      📸 Our Memories
+    </h2>
 
-      <p className="text-center mt-4 italic text-pink-600">
-        Beautiful Moment ❤️
-      </p>
-    </div>
-  ))}
+    <p className="text-gray-600 mt-3">
+      Every picture holds a story ❤️
+    </p>
+  </div>
+
+  <div
+    className={`grid gap-8 justify-items-center ${
+      imageUrls.length === 1
+        ? "grid-cols-1"
+        : "grid-cols-1 sm:grid-cols-2"
+    }`}
+  >
+    {imageUrls.map((url, index) => (
+      <div
+        key={index}
+        className={`relative w-full max-w-sm bg-[#f8efd9] p-4 sm:p-5 shadow-2xl border-[3px] border-[#d2b48c] ${
+  index % 2 === 0
+    ? "rotate-[-2deg]"
+    : "rotate-[2deg]"
+}`}
+      >
+        {/* Tape decoration */}
+
+        <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-28 h-9 bg-[#e8cfa5]/90 rotate-[-3deg] shadow-sm flex items-center justify-center text-xs font-bold text-[#6b4f32]">
+  MEMORA
 </div>
+
+        {/* Memory number */}
+
+        <div className="absolute -top-3 -right-3 w-10 h-10 rounded-full bg-pink-600 text-white flex items-center justify-center font-black shadow-lg">
+          {index + 1}
+        </div>
+
+        {/* Photo */}
+
+        <img
+          src={url}
+          alt={`Memory ${index + 1}`}
+          className="w-full h-64 sm:h-80 object-cover rounded-md border-4 border-white shadow-md"
+        />
+
+        {/* Caption */}
+
+        <div className="pt-5 pb-2 text-center">
+          <p className="text-sm text-gray-400 font-semibold uppercase tracking-widest">
+  ✨❤️ {index + 1} ✨
+</p>
+
+          <p className="text-xl font-bold text-pink-600 mt-2">
+  A Moment to Remember ❤️
+</p>
+
+          <div className="text-2xl mt-2">
+            ✨ 🌸 ✨
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
+ 
             {/* STORY */}
 
-            <div className="mt-20 bg-[#fffaf0] rounded-3xl border-4 border-yellow-300 shadow-xl p-12">
 
-              <h2 className="text-center text-5xl font-black text-pink-700">
-                📖 Memories to Cherish
-              </h2>
+<div
+  id="story-page"
+  className="mt-16 sm:mt-20 relative overflow-hidden bg-[#e9d2a7] rounded-[28px] border-[5px] border-[#9b7045] shadow-2xl p-6 sm:p-10 md:p-12"
+>
+  {/* Heading */}
 
-              <p className="text-center mt-3 text-gray-600">
-                Written by Memora ❤️
-              </p>
+  <div className="text-center">
+    <p className="text-pink-500 font-bold tracking-[0.2em] uppercase text-sm">
+      A Story From The Heart
+    </p>
 
-              <div className="bg-white rounded-2xl shadow-lg p-10 mt-10">
+    <h2 className="text-3xl sm:text-5xl font-black text-pink-700 mt-2">
+      📖 Memories to Cherish
+    </h2>
 
-                <p className="text-xl leading-10 text-gray-700 whitespace-pre-line">
-                  {aiStory}
-                </p>
+    <div className="flex justify-center items-center gap-3 mt-4 text-2xl">
+      <span>🌸</span>
+      <span className="text-yellow-400">✦</span>
+      <span>❤️</span>
+      <span className="text-yellow-400">✦</span>
+      <span>🌸</span>
+    </div>
 
-              </div>
+    <p className="text-gray-500 mt-4">
+      Written especially for your memories by Memora ❤️
+    </p>
+  </div>
 
-            </div>
+  {/* Story paper */}
+
+  <div className="relative bg-[#f8efd9] rounded-xl shadow-xl border-2 border-[#c9a66b] p-6 sm:p-10 mt-10 overflow-hidden rotate-[0.5deg]">
+
+    {/* Decorative corners */}
+
+    <div className="absolute top-3 left-4 text-3xl opacity-60">
+      🌿
+    </div>
+
+    <div className="absolute top-3 right-4 text-3xl opacity-60">
+      🌿
+    </div>
+
+    <div className="absolute bottom-3 left-4 text-3xl opacity-60">
+      🌸
+    </div>
+
+    <div className="absolute bottom-3 right-4 text-3xl opacity-60">
+      🌸
+    </div>
+
+    {/* Story */}
+
+    <div className="relative z-10 max-w-3xl mx-auto">
+
+      <div className="text-center text-4xl mb-6">
+        💕
+      </div>
+
+      <p className="text-base sm:text-xl leading-8 sm:leading-10 text-[#5c4632] whitespace-pre-line break-words font-serif">
+        {aiStory}
+      </p>
+
+      <div className="text-center mt-10 text-3xl">
+        ✨ 🌷 ✨
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
 
             {/* THANK YOU */}
+<div
+  id="thank-you-page"
+  className="relative overflow-hidden mt-16 sm:mt-20 bg-[#e9d2a7] rounded-[28px] border-[5px] border-[#9b7045] shadow-2xl p-8 sm:p-12 md:p-16 text-center min-h-[700px] flex flex-col items-center justify-center"
+>
+  {/* Decorations */}
 
-            <div className="mt-20 bg-pink-100 rounded-3xl shadow-xl p-16 text-center">
+  <div className="absolute top-6 left-6 text-4xl sm:text-5xl opacity-70">
+    🌸
+  </div>
 
-              <div className="text-7xl">
-                ❤️
-              </div>
+  <div className="absolute top-6 right-6 text-4xl sm:text-5xl opacity-70">
+    ✨
+  </div>
 
-              <h2 className="text-5xl font-black text-pink-700 mt-6">
-                Thank You
-              </h2>
+  <div className="absolute bottom-6 left-6 text-4xl sm:text-5xl opacity-70">
+    📸
+  </div>
 
-              <p className="text-2xl mt-6 text-gray-700">
-                Every memory deserves a beautiful story.
-              </p>
+  <div className="absolute bottom-6 right-6 text-4xl sm:text-5xl opacity-70">
+    🌷
+  </div>
 
-            </div>
+  {/* Heart */}
 
+  <div className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-[#f8efd9] border-4 border-[#c9a66b] shadow-2xl flex items-center justify-center rotate-[-3deg]">
+    <span className="text-6xl sm:text-7xl">
+      ❤️
+    </span>
+  </div>
+
+  {/* Ending */}
+
+  <p className="text-pink-600 font-bold tracking-[0.2em] uppercase text-sm mt-10">
+    Until the next memory...
+  </p>
+
+  <h2 className="text-4xl sm:text-5xl md:text-6xl font-black text-pink-700 mt-3">
+    Thank You ❤️
+  </h2>
+
+  <div className="flex items-center gap-4 text-2xl mt-5">
+    <span>🌸</span>
+    <span className="text-yellow-400">✦</span>
+    <span>✨</span>
+    <span className="text-yellow-400">✦</span>
+    <span>🌸</span>
+  </div>
+
+  <p className="max-w-xl text-lg sm:text-xl md:text-2xl mt-8 text-[#5c4632] leading-9 font-serif italic">
+    Every memory deserves a beautiful story.
+  </p>
+
+  <div className="mt-10 bg-white/90 rounded-3xl shadow-lg border border-pink-100 px-6 sm:px-10 py-5">
+    <p className="text-gray-600 font-semibold">
+      📖 Created with love by
+    </p>
+
+    <p className="text-2xl font-black text-pink-600 mt-1">
+      MEMORA
+    </p>
+  </div>
+
+</div>
           </div>
 
         )}
@@ -371,7 +594,7 @@ export default function GeneratePage() {
             onClick={downloadScrapbook}
             className="w-full mt-10 bg-green-600 hover:bg-green-700 text-white text-2xl font-bold py-5 rounded-2xl shadow-xl transition"
           >
-            📸 Download Scrapbook (PNG)
+            📸 Download Scrapbook (PDF)
           </button>
 
         )}
@@ -382,4 +605,5 @@ export default function GeneratePage() {
 
   );
 
-}         
+}
+

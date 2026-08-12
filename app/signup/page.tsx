@@ -72,8 +72,8 @@ export default function SignupPage() {
           </button>
         </form>
 
-        import Link from "next/link";
-        <p className="text-center text-gray-500 mt-6">
+      
+        <p className="text-center text-gray-600 mt-6">
   Already have an account?{" "}
   <Link
     href="/login"

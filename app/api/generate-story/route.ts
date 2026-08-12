@@ -1,13 +1,53 @@
 export async function POST(req: Request) {
-  const { memoryPrompt } = await req.json();
+  try {
+    const { memoryPrompt, photoCount, style } = await req.json();
 
-  const story = `
+    const story = `
 ${memoryPrompt}
 
-This memory is a beautiful reminder that life's greatest treasures are the moments we share with the people we love. Every smile captured in these photographs tells a story of happiness, togetherness, and unforgettable experiences. Looking back at these memories fills the heart with gratitude and reminds us that every journey, every laugh, and every adventure becomes a part of who we are. May these moments continue to inspire joy and remain cherished forever.
+These ${photoCount || 1} beautiful photographs capture the heart of this ${
+      style || "special"
+    } memory.
+
+What makes these moments special is not simply what happened, but the
+people, emotions, laughter and little details that made the experience
+worth remembering.
+
+Looking back at these memories reminds us that some of life's greatest
+treasures are the simple moments we share together. Every photograph
+holds a piece of that story, and together they create a memory worth
+keeping forever.
+
+May these moments always bring a smile, and may this little scrapbook
+remain a reminder of the happiness that was shared.
 `;
 
-  return Response.json({
-    story,
-  });
+    const captions = Array.from(
+      { length: Number(photoCount) || 1 },
+      (_, index) =>
+        [
+          "A beautiful moment worth remembering ❤️",
+          "A little piece of happiness ✨",
+          "One of those moments we wish could last forever 🌸",
+          "Smiles, memories and people who matter ❤️",
+          "A memory to look back on with a smile ✨",
+        ][index % 5]
+    );
+
+    return Response.json({
+      story,
+      captions,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return Response.json(
+      {
+        error: "Failed to create story",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
 }

@@ -4,20 +4,20 @@ export default function Home() {
     <main className="min-h-screen bg-gray-50">
 
       {/* Navigation Bar */}
-      <nav className="flex justify-between items-center px-10 py-5 bg-white shadow">
+      <nav className="flex flex-col sm:flex-row justify-between items-center px-4 sm:px-10 py-4 sm:py-5 bg-white shadow gap-4">
 
-        <h1 className="text-2xl font-bold text-blue-600">
-          📖 MemoryBook 
-        </h1>
+  <h1 className="text-2xl font-bold text-blue-600">
+    📖 MemoryBook
+  </h1>
 
-        <div className="flex gap-8 text-gray-700 font-medium">
-          <a href="/signup">Home</a>
-          <a href="/signup">Features</a>
-          <a href="/signup">Pricing</a>
-          <a href="/signup">Login</a>
-        </div>
+  <div className="flex flex-wrap justify-center gap-4 sm:gap-8 text-gray-700 font-medium">
+    <a href="/signup">Home</a>
+    <a href="/signup">Features</a>
+    <a href="/signup">Pricing</a>
+    <a href="/signup">Login</a>
+  </div>
 
-      </nav>
+</nav>
 
       {/* Hero Section */}
 
@@ -25,7 +25,7 @@ export default function Home() {
 
         <h2 className="text-5xl font-bold text-gray-900 leading-tight">
   Every Memory Deserves <br />
-  a Beautiful Story ❤️
+  Beautiful Story ❤️
 </h2>
 
 <p className="mt-6 text-lg text-gray-600 max-w-2xl">
@@ -112,7 +112,7 @@ export default function Home() {
   </div>
 </section>
 <footer className="text-center py-6 text-gray-500">
-  Made with ❤️ by Payal
+  Made with ❤️
 </footer>
     </main>
   );
