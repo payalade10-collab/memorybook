@@ -45,7 +45,11 @@ export default function MemoryForm() {
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-md max-w-xl mx-auto">
-      <ImageUpload onImageSelected={setImage} />
+      <ImageUpload
+  onImagesSelected={(files) => {
+    setImage(files[0] || null);
+  }}
+/>
 
       <input
         type="text"

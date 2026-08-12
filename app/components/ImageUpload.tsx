@@ -1,23 +1,25 @@
 "use client";
 
-import { useState } from "react";
-
 interface ImageUploadProps {
-  onImageSelected: (file: File) => void;
+  onImagesSelected: (files: File[]) => void;
 }
 
+
 export default function ImageUpload({
-  onImageSelected,
+  onImagesSelected,
 }: ImageUploadProps) {
-  const [preview, setPreview] = useState("");
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files || []);
 
-    if (!file) return;
+    if (files.length === 0) return;
 
-    setPreview(URL.createObjectURL(file));
-    onImageSelected(file);
+    if (files.length > 5) {
+      alert("Maximum 5 photos allowed.");
+      e.target.value = "";
+      return;
+    }
+
+    onImagesSelected(files);
   };
 
   return (
@@ -25,17 +27,14 @@ export default function ImageUpload({
       <input
         type="file"
         accept="image/*"
+        multiple
         onChange={handleChange}
-        className="text-grey-700 file:bg-blue-600 file:text-white file:px-4 file:py-2 file:rounded-lg file:border-o file:cursor-pointer hover:file:bg-blue-700"
+        className="text-gray-700 file:bg-blue-600 file:text-white file:px-4 file:py-2 file:rounded-lg file:border-0 file:cursor-pointer hover:file:bg-blue-700"
       />
 
-      {preview && (
-        <img
-          src={preview}
-          alt="Preview"
-          className="mt-4 w-full h-64 object-cover rounded-xl shadow"
-        />
-      )}
+      <p className="mt-3 text-sm text-gray-500">
+        Select 1 to 5 photos at once.
+      </p>
     </div>
   );
 }
