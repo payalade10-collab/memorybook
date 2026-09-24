@@ -1,49 +1,686 @@
-export async function POST(req: Request) {
+import { NextResponse } from "next/server";
+
+interface PhotoInput {
+  id: string;
+  url: string;
+}
+
+interface AnalyzedPhoto {
+  id: string;
+  caption: string;
+  place: string;
+  situation: string;
+}
+
+// Use a currently available Gemini model.
+// Gemini 2.5 access can be limited for newer projects.
+const GEMINI_MODEL = "gemini-3.5-flash";
+
+function getGeminiText(data: any): string {
+  return (
+    data?.candidates?.[0]?.content?.parts
+      ?.filter(
+        (part: any) =>
+          typeof part.text === "string"
+      )
+      ?.map((part: any) => part.text)
+      ?.join("") || ""
+  );
+}
+
+function cleanJsonText(text: string): string {
+  return text
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+}
+
+async function analyzePhoto(
+  photo: PhotoInput,
+  apiKey: string
+): Promise<AnalyzedPhoto> {
   try {
-    const { memoryPrompt, photoCount, style } = await req.json();
-
-    const story = `
-${memoryPrompt}
-
-These ${photoCount || 1} beautiful photographs capture the heart of this ${
-      style || "special"
-    } memory.
-
-What makes these moments special is not simply what happened, but the
-people, emotions, laughter and little details that made the experience
-worth remembering.
-
-Looking back at these memories reminds us that some of life's greatest
-treasures are the simple moments we share together. Every photograph
-holds a piece of that story, and together they create a memory worth
-keeping forever.
-
-May these moments always bring a smile, and may this little scrapbook
-remain a reminder of the happiness that was shared.
-`;
-
-    const captions = Array.from(
-      { length: Number(photoCount) || 1 },
-      (_, index) =>
-        [
-          "A beautiful moment worth remembering ❤️",
-          "A little piece of happiness ✨",
-          "One of those moments we wish could last forever 🌸",
-          "Smiles, memories and people who matter ❤️",
-          "A memory to look back on with a smile ✨",
-        ][index % 5]
+    console.log(
+      "================================="
     );
 
-    return Response.json({
-      story,
-      captions,
+    console.log(
+      "Analyzing photo:",
+      photo.id
+    );
+
+    // Make sure the frontend actually sent the image.
+    if (
+      !photo.url ||
+      !photo.url.startsWith("data:image/")
+    ) {
+      throw new Error(
+        "Photo does not contain valid Base64 image data."
+      );
+    }
+
+    // Correct Base64 image format:
+    // data:image/jpeg;base64,AAAA...
+    const match = photo.url.match(
+      /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/
+    );
+
+    if (!match) {
+      throw new Error(
+        "Could not extract image MIME type and Base64 data."
+      );
+    }
+
+    const mimeType = match[1];
+    const base64Data = match[2];
+
+    console.log(
+      "Image type:",
+      mimeType
+    );
+
+    console.log(
+      "Base64 length:",
+      base64Data.length
+    );
+
+    const prompt = `
+You are the visual intelligence system for a premium digital memory album.
+
+Look carefully at the EXACT photograph provided with this request.
+
+Analyze what is actually visible in the photograph.
+
+Your job is to determine three things.
+
+1. PLACE
+
+Identify the visible place, landmark, environment, or setting.
+
+Examples:
+
+- Gateway of India
+- Marine Drive
+- beach
+- mountain viewpoint
+- college campus
+- restaurant
+- temple
+- garden
+- wedding venue
+- home
+- airport
+- railway station
+- city street
+- park
+- tourist attraction
+
+If a famous landmark is clearly recognizable, identify its actual name.
+
+If the exact place cannot be identified, describe the visible setting instead.
+
+NEVER invent an exact location.
+
+2. SITUATION
+
+Understand what is happening in the photograph.
+
+Examples:
+
+- friends enjoying a trip
+- family gathering
+- birthday celebration
+- sightseeing
+- graduation
+- wedding celebration
+- eating together
+- relaxing at the beach
+- posing for a photograph
+- exploring a city
+- enjoying nature
+- studying
+- travelling
+- visiting a landmark
+- attending an event
+
+Only describe what can reasonably be understood from the photograph.
+
+NEVER invent relationships, names, events, or facts that cannot be seen.
+
+3. CAPTION
+
+Create ONE beautiful, natural caption specifically for THIS photograph.
+
+The caption must be based on:
+
+PLACE + SITUATION + visible details.
+
+The caption must be between 8 and 25 words.
+
+The caption should sound like something a real person would put under their favourite photograph in a beautiful memory album.
+
+IMPORTANT:
+
+The caption MUST be specific to this photograph.
+
+Do NOT write generic captions such as:
+
+"A beautiful moment worth remembering."
+
+"A special memory."
+
+"Making memories."
+
+"A day to remember."
+
+Do NOT use the same caption structure for every photograph.
+
+If a recognizable landmark is visible, mention it naturally.
+
+If the exact place is unknown, mention the visible setting instead.
+
+If people are doing something identifiable, mention that situation.
+
+If it is a travel photograph, make it feel like a travel memory.
+
+If it is a celebration, make it feel like a celebration.
+
+If it is nature, describe the scenery naturally.
+
+If it is food, describe the food or dining situation.
+
+If it is a group photograph, describe the visible group moment.
+
+If it is architecture or landmark photography, focus on the place.
+
+Never invent:
+
+- names
+- dates
+- relationships
+- exact locations
+- events
+- facts that are not visible
+
+Examples:
+
+Gateway of India:
+
+"Standing beside Mumbai's iconic Gateway of India, capturing a beautiful moment from the city adventure."
+
+Beach:
+
+"An easygoing evening by the sea, filled with laughter, friendship, and the sound of waves."
+
+Mountain:
+
+"Taking in peaceful mountain views and enjoying a quiet escape surrounded by nature."
+
+Birthday:
+
+"Celebrating another beautiful year together, surrounded by laughter, cake, and the people who make it special."
+
+College:
+
+"College memories, new experiences, and familiar faces coming together for a memorable day."
+
+Restaurant:
+
+"Good food, warm conversations, and a relaxed evening shared around the table."
+
+Return ONLY valid JSON in exactly this structure:
+
+{
+  "place": "specific visible place or setting",
+  "situation": "what is happening",
+  "caption": "specific caption for this exact photograph"
+}
+`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+
+          "x-goog-api-key": apiKey,
+        },
+
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  inline_data: {
+                    mime_type: mimeType,
+                    data: base64Data,
+                  },
+                },
+                {
+                  text: prompt,
+                },
+              ],
+            },
+          ],
+
+          generationConfig: {
+            temperature: 0.7,
+            responseMimeType:
+              "application/json",
+          },
+        }),
+      }
+    );
+
+    const responseText =
+      await response.text();
+
+    console.log(
+      "Gemini model:",
+      GEMINI_MODEL
+    );
+
+    console.log(
+      "Gemini status:",
+      response.status
+    );
+
+    if (!response.ok) {
+      console.error(
+        "Gemini API error:",
+        responseText
+      );
+
+      throw new Error(
+        `Gemini API failed with status ${response.status}: ${responseText}`
+      );
+    }
+
+    let data: any;
+
+    try {
+      data = JSON.parse(
+        responseText
+      );
+    } catch {
+      console.error(
+        "Invalid Gemini API response:",
+        responseText
+      );
+
+      throw new Error(
+        "Gemini returned an invalid API response."
+      );
+    }
+
+    const outputText =
+      getGeminiText(data);
+
+    console.log(
+      "Gemini output:",
+      outputText
+    );
+
+    if (!outputText) {
+      throw new Error(
+        "Gemini returned no analysis."
+      );
+    }
+
+    let parsed: any;
+
+    try {
+      const cleaned =
+        cleanJsonText(
+          outputText
+        );
+
+      parsed = JSON.parse(
+        cleaned
+      );
+    } catch {
+      console.error(
+        "Gemini returned invalid JSON:",
+        outputText
+      );
+
+      throw new Error(
+        "Gemini returned invalid caption JSON."
+      );
+    }
+
+    const place =
+      typeof parsed.place ===
+        "string" &&
+      parsed.place.trim()
+        ? parsed.place.trim()
+        : "Location unavailable";
+
+    const situation =
+      typeof parsed.situation ===
+        "string" &&
+      parsed.situation.trim()
+        ? parsed.situation.trim()
+        : "A memorable moment";
+
+    const caption =
+      typeof parsed.caption ===
+        "string" &&
+      parsed.caption.trim()
+        ? parsed.caption.trim()
+        : "";
+
+    if (!caption) {
+      throw new Error(
+        "Gemini did not generate a caption."
+      );
+    }
+
+    console.log(
+      "AI PLACE:",
+      place
+    );
+
+    console.log(
+      "AI SITUATION:",
+      situation
+    );
+
+    console.log(
+      "AI CAPTION:",
+      caption
+    );
+
+    console.log(
+      "================================="
+    );
+
+    return {
+      id: photo.id,
+      place,
+      situation,
+      caption,
+    };
+  } catch (error) {
+    console.error(
+      `PHOTO ANALYSIS FAILED FOR ${photo.id}:`,
+      error
+    );
+
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : String(error);
+
+    return {
+      id: photo.id,
+
+      place:
+        "AI analysis failed",
+
+      situation:
+        errorMessage,
+
+      caption:
+        `AI error: ${errorMessage}`,
+    };
+  }
+}
+
+async function createAlbumIntroduction(
+  title: string,
+  photos: AnalyzedPhoto[],
+  apiKey: string
+): Promise<string> {
+  try {
+    const photoInformation =
+      photos
+        .map(
+          (photo, index) => `
+Photo ${index + 1}
+
+Place:
+${photo.place}
+
+Situation:
+${photo.situation}
+
+Caption:
+${photo.caption}
+`
+        )
+        .join("\n");
+
+    const prompt = `
+Create a warm introduction for a digital memory album.
+
+Album title:
+
+${title}
+
+Photo information:
+
+${photoInformation}
+
+Write exactly 2 short paragraphs.
+
+The introduction should feel connected to the actual photographs.
+
+Rules:
+
+- Do not invent facts.
+- Do not mention AI.
+- Do not repeat the captions word-for-word.
+- Mention the overall feeling of the memories.
+- Keep it natural and emotional.
+- Make it suitable for a personal photo album.
+
+Return only the introduction.
+`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+
+          "x-goog-api-key": apiKey,
+        },
+
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt,
+                },
+              ],
+            },
+          ],
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText =
+        await response.text();
+
+      console.error(
+        "Album introduction Gemini error:",
+        errorText
+      );
+
+      return "";
+    }
+
+    const data =
+      await response.json();
+
+    return getGeminiText(
+      data
+    ).trim();
+  } catch (error) {
+    console.error(
+      "Album introduction failed:",
+      error
+    );
+
+    return "";
+  }
+}
+
+export async function POST(
+  req: Request
+) {
+  try {
+    const body =
+      await req.json();
+
+    const photos: PhotoInput[] =
+      Array.isArray(body.photos)
+        ? body.photos
+        : [];
+
+    const title =
+      typeof body.title ===
+        "string" &&
+      body.title.trim()
+        ? body.title.trim()
+        : "My Memory Album";
+
+    if (photos.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Please upload at least one photo.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (photos.length > 5) {
+      return NextResponse.json(
+        {
+          error:
+            "Maximum 5 photos are allowed.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const apiKey =
+      process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      return NextResponse.json(
+        {
+          error:
+            "GEMINI_API_KEY is missing from .env.local.",
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    console.log(
+      "================================="
+    );
+
+    console.log(
+      "MEMORA AI ALBUM GENERATION"
+    );
+
+    console.log(
+      "Gemini model:",
+      GEMINI_MODEL
+    );
+
+    console.log(
+      "Title:",
+      title
+    );
+
+    console.log(
+      "Number of photos:",
+      photos.length
+    );
+
+    console.log(
+      "Starting AI photo analysis..."
+    );
+
+    console.log(
+      "================================="
+    );
+
+    /*
+     * Analyze all selected photographs
+     * at the same time.
+     */
+    const analyzedPhotos =
+      await Promise.all(
+        photos.map(
+          (photo) =>
+            analyzePhoto(
+              photo,
+              apiKey
+            )
+        )
+      );
+
+    console.log(
+      "All photo analysis completed."
+    );
+
+    const story =
+      await createAlbumIntroduction(
+        title,
+        analyzedPhotos,
+        apiKey
+      );
+
+    console.log(
+      "Album introduction generated."
+    );
+
+    return NextResponse.json({
+      success: true,
+
+      story:
+        story ||
+        `A collection of meaningful moments from "${title}", brought together to preserve the places, experiences, and feelings captured along the way.`,
+
+      photos:
+        analyzedPhotos,
+
+      captions:
+        analyzedPhotos.map(
+          (photo) =>
+            photo.caption
+        ),
     });
   } catch (error) {
-    console.error(error);
+    console.error(
+      "Generate album error:",
+      error
+    );
 
-    return Response.json(
+    return NextResponse.json(
       {
-        error: "Failed to create story",
+        error:
+          "Something went wrong while creating your album.",
       },
       {
         status: 500,
