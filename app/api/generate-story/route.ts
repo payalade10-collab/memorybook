@@ -12,16 +12,16 @@ interface AnalyzedPhoto {
   situation: string;
 }
 
-// Use a currently available Gemini model.
-// Gemini 2.5 access can be limited for newer projects.
-const GEMINI_MODEL = "gemini-3.5-flash";
+// Keep your currently working model for now.
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
+
+const MAX_RETRIES = 3;
 
 function getGeminiText(data: any): string {
   return (
     data?.candidates?.[0]?.content?.parts
       ?.filter(
-        (part: any) =>
-          typeof part.text === "string"
+        (part: any) => typeof part.text === "string"
       )
       ?.map((part: any) => part.text)
       ?.join("") || ""
@@ -34,6 +34,164 @@ function cleanJsonText(text: string): string {
     .replace(/^```\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
+}
+
+/**
+ * Wait helper for Gemini retry.
+ */
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/**
+ * Sends a request to Gemini.
+ *
+ * 503 errors are temporary, so we retry them.
+ *
+ * Other errors are returned immediately because retrying
+ * things like an invalid API key will not help.
+ */
+async function callGemini(
+  requestBody: any,
+  apiKey: string
+): Promise<any> {
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
+  let lastError = "";
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      console.log(
+        `Gemini request attempt ${attempt}/${MAX_RETRIES}`
+      );
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const responseText = await response.text();
+
+      console.log(
+        "Gemini status:",
+        response.status
+      );
+
+      if (response.ok) {
+        try {
+          return JSON.parse(responseText);
+        } catch {
+          throw new Error(
+            "Gemini returned an invalid API response."
+          );
+        }
+      }
+
+      lastError = responseText;
+
+      console.error(
+        `Gemini API error (${response.status}):`,
+        responseText
+      );
+
+      /*
+       * 503 = temporary service overload/unavailability.
+       *
+       * Retry after waiting.
+       */
+      if (response.status === 503) {
+        if (attempt < MAX_RETRIES) {
+          const delay =
+            attempt === 1
+              ? 2000
+              : attempt === 2
+              ? 5000
+              : 9000;
+
+          console.log(
+            `Gemini temporarily unavailable. Retrying in ${delay}ms...`
+          );
+
+          await wait(delay);
+          continue;
+        }
+      }
+
+      /*
+       * 429 = rate limit.
+       *
+       * Also worth retrying.
+       */
+      if (response.status === 429) {
+        if (attempt < MAX_RETRIES) {
+          const delay =
+            attempt === 1
+              ? 3000
+              : attempt === 2
+              ? 7000
+              : 12000;
+
+          console.log(
+            `Gemini rate limited. Retrying in ${delay}ms...`
+          );
+
+          await wait(delay);
+          continue;
+        }
+      }
+
+      /*
+       * Other errors should not be retried.
+       */
+      throw new Error(
+        `Gemini API failed with status ${response.status}: ${responseText}`
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : String(error);
+
+      lastError = errorMessage;
+
+      /*
+       * If this was already our explicit API error,
+       * don't blindly retry it.
+       */
+      if (
+        !errorMessage.includes("status 503") &&
+        !errorMessage.includes("status 429")
+      ) {
+        throw error;
+      }
+
+      if (attempt < MAX_RETRIES) {
+        const delay =
+          attempt === 1
+            ? 2000
+            : attempt === 2
+            ? 5000
+            : 9000;
+
+        console.log(
+          `Temporary Gemini error. Retrying in ${delay}ms...`
+        );
+
+        await wait(delay);
+      }
+    }
+  }
+
+  throw new Error(
+    `Gemini temporarily unavailable after ${MAX_RETRIES} attempts. ${lastError}`
+  );
 }
 
 async function analyzePhoto(
@@ -50,7 +208,10 @@ async function analyzePhoto(
       photo.id
     );
 
-    // Make sure the frontend actually sent the image.
+    /*
+     * Make sure the frontend actually sent
+     * Base64 image data.
+     */
     if (
       !photo.url ||
       !photo.url.startsWith("data:image/")
@@ -60,8 +221,15 @@ async function analyzePhoto(
       );
     }
 
-    // Correct Base64 image format:
-    // data:image/jpeg;base64,AAAA...
+    /*
+     * Extract MIME type and Base64 data.
+     *
+     * Examples:
+     *
+     * data:image/jpeg;base64,AAAA...
+     * data:image/png;base64,AAAA...
+     * data:image/webp;base64,AAAA...
+     */
     const match = photo.url.match(
       /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/
     );
@@ -238,84 +406,37 @@ Return ONLY valid JSON in exactly this structure:
 }
 `;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type":
-            "application/json",
-
-          "x-goog-api-key": apiKey,
-        },
-
-        body: JSON.stringify({
-          contents: [
+    const requestBody = {
+      contents: [
+        {
+          parts: [
             {
-              parts: [
-                {
-                  inline_data: {
-                    mime_type: mimeType,
-                    data: base64Data,
-                  },
-                },
-                {
-                  text: prompt,
-                },
-              ],
+              inline_data: {
+                mime_type: mimeType,
+                data: base64Data,
+              },
+            },
+            {
+              text: prompt,
             },
           ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.7,
+        responseMimeType: "application/json",
+      },
+    };
 
-          generationConfig: {
-            temperature: 0.7,
-            responseMimeType:
-              "application/json",
-          },
-        }),
-      }
+    const data = await callGemini(
+      requestBody,
+      apiKey
     );
-
-    const responseText =
-      await response.text();
 
     console.log(
       "Gemini model:",
       GEMINI_MODEL
     );
-
-    console.log(
-      "Gemini status:",
-      response.status
-    );
-
-    if (!response.ok) {
-      console.error(
-        "Gemini API error:",
-        responseText
-      );
-
-      throw new Error(
-        `Gemini API failed with status ${response.status}: ${responseText}`
-      );
-    }
-
-    let data: any;
-
-    try {
-      data = JSON.parse(
-        responseText
-      );
-    } catch {
-      console.error(
-        "Invalid Gemini API response:",
-        responseText
-      );
-
-      throw new Error(
-        "Gemini returned an invalid API response."
-      );
-    }
 
     const outputText =
       getGeminiText(data);
@@ -335,13 +456,9 @@ Return ONLY valid JSON in exactly this structure:
 
     try {
       const cleaned =
-        cleanJsonText(
-          outputText
-        );
+        cleanJsonText(outputText);
 
-      parsed = JSON.parse(
-        cleaned
-      );
+      parsed = JSON.parse(cleaned);
     } catch {
       console.error(
         "Gemini returned invalid JSON:",
@@ -354,22 +471,19 @@ Return ONLY valid JSON in exactly this structure:
     }
 
     const place =
-      typeof parsed.place ===
-        "string" &&
+      typeof parsed.place === "string" &&
       parsed.place.trim()
         ? parsed.place.trim()
         : "Location unavailable";
 
     const situation =
-      typeof parsed.situation ===
-        "string" &&
+      typeof parsed.situation === "string" &&
       parsed.situation.trim()
         ? parsed.situation.trim()
         : "A memorable moment";
 
     const caption =
-      typeof parsed.caption ===
-        "string" &&
+      typeof parsed.caption === "string" &&
       parsed.caption.trim()
         ? parsed.caption.trim()
         : "";
@@ -416,17 +530,15 @@ Return ONLY valid JSON in exactly this structure:
         ? error.message
         : String(error);
 
+    /*
+     * Do NOT crash the entire album if
+     * one photograph fails.
+     */
     return {
       id: photo.id,
-
-      place:
-        "AI analysis failed",
-
-      situation:
-        errorMessage,
-
-      caption:
-        `AI error: ${errorMessage}`,
+      place: "AI analysis failed",
+      situation: errorMessage,
+      caption: `AI error: ${errorMessage}`,
     };
   }
 }
@@ -482,50 +594,27 @@ Rules:
 Return only the introduction.
 `;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type":
-            "application/json",
-
-          "x-goog-api-key": apiKey,
-        },
-
-        body: JSON.stringify({
-          contents: [
+    const requestBody = {
+      contents: [
+        {
+          parts: [
             {
-              parts: [
-                {
-                  text: prompt,
-                },
-              ],
+              text: prompt,
             },
           ],
-        }),
-      }
+        },
+      ],
+      generationConfig: {
+        temperature: 0.7,
+      },
+    };
+
+    const data = await callGemini(
+      requestBody,
+      apiKey
     );
 
-    if (!response.ok) {
-      const errorText =
-        await response.text();
-
-      console.error(
-        "Album introduction Gemini error:",
-        errorText
-      );
-
-      return "";
-    }
-
-    const data =
-      await response.json();
-
-    return getGeminiText(
-      data
-    ).trim();
+    return getGeminiText(data).trim();
   } catch (error) {
     console.error(
       "Album introduction failed:",
@@ -540,8 +629,7 @@ export async function POST(
   req: Request
 ) {
   try {
-    const body =
-      await req.json();
+    const body = await req.json();
 
     const photos: PhotoInput[] =
       Array.isArray(body.photos)
@@ -549,8 +637,7 @@ export async function POST(
         : [];
 
     const title =
-      typeof body.title ===
-        "string" &&
+      typeof body.title === "string" &&
       body.title.trim()
         ? body.title.trim()
         : "My Memory Album";
@@ -626,19 +713,43 @@ export async function POST(
     );
 
     /*
-     * Analyze all selected photographs
-     * at the same time.
+     * IMPORTANT:
+     *
+     * Process photos ONE AT A TIME.
+     *
+     * The old Promise.all() sent all photos
+     * to Gemini simultaneously, which increases
+     * the chance of 503 errors.
      */
-    const analyzedPhotos =
-      await Promise.all(
-        photos.map(
-          (photo) =>
-            analyzePhoto(
-              photo,
-              apiKey
-            )
-        )
+    const analyzedPhotos: AnalyzedPhoto[] = [];
+
+    for (const photo of photos) {
+      console.log(
+        `Starting photo ${photo.id}`
       );
+
+      const analyzed =
+        await analyzePhoto(
+          photo,
+          apiKey
+        );
+
+      analyzedPhotos.push(analyzed);
+
+      console.log(
+        `Finished photo ${photo.id}`
+      );
+
+      /*
+       * Small pause between photos.
+       *
+       * This reduces the chance of sending
+       * requests too quickly.
+       */
+      if (photo !== photos[photos.length - 1]) {
+        await wait(1000);
+      }
+    }
 
     console.log(
       "All photo analysis completed."
@@ -662,25 +773,24 @@ export async function POST(
         story ||
         `A collection of meaningful moments from "${title}", brought together to preserve the places, experiences, and feelings captured along the way.`,
 
-      photos:
-        analyzedPhotos,
+      photos: analyzedPhotos,
 
       captions:
         analyzedPhotos.map(
-          (photo) =>
-            photo.caption
+          (photo) => photo.caption
         ),
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error(
-      "Generate album error:",
+      "MEMORA API ERROR:",
       error
     );
 
     return NextResponse.json(
       {
         error:
-          "Something went wrong while creating your album.",
+          error?.message ||
+          "Gemini failed to generate the album.",
       },
       {
         status: 500,
