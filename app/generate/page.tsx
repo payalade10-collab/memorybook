@@ -10,11 +10,17 @@ interface PhotoItem {
   file: File;
   url: string;
   caption: string;
+  place: string;
+  situation: string;
+  date: string;
 }
 
 interface AnalyzedPhoto {
   id: string;
   caption: string;
+  place: string;
+  situation: string;
+  date: string;
 }
 
 function createId() {
@@ -28,6 +34,125 @@ function createId() {
   return `${Date.now()}-${Math.random()
     .toString(36)
     .slice(2)}`;
+}
+
+async function readExifDate(file: File): Promise<string> {
+  try {
+    if (file.type !== "image/jpeg" && file.type !== "image/jpg") {
+      return "Date unavailable";
+    }
+
+    const buffer = await file.arrayBuffer();
+    const view = new DataView(buffer);
+
+    if (view.byteLength < 4 || view.getUint16(0, false) !== 0xffd8) {
+      return "Date unavailable";
+    }
+
+    let offset = 2;
+
+    while (offset + 4 < view.byteLength) {
+      if (view.getUint8(offset) !== 0xff) {
+        offset++;
+        continue;
+      }
+
+      const marker = view.getUint8(offset + 1);
+      if (marker === 0xda || marker === 0xd9) break;
+
+      const segmentLength = view.getUint16(offset + 2, false);
+
+      if (marker === 0xe1 && offset + 10 < view.byteLength) {
+        const exifStart = offset + 4;
+        const header = new TextDecoder().decode(
+          new Uint8Array(buffer, exifStart, 6)
+        );
+
+        if (header === "Exif\0\0") {
+          const tiffStart = exifStart + 6;
+          const byteOrder = new TextDecoder().decode(
+            new Uint8Array(buffer, tiffStart, 2)
+          );
+          const little = byteOrder === "II";
+
+          if (view.getUint16(tiffStart + 2, little) !== 42) {
+            return "Date unavailable";
+          }
+
+          const u16 = (pos: number) => view.getUint16(pos, little);
+          const u32 = (pos: number) => view.getUint32(pos, little);
+          const ifd0 = tiffStart + u32(tiffStart + 4);
+          const count = u16(ifd0);
+          let exifIfdOffset = 0;
+          let dateOffset = 0;
+
+          for (let i = 0; i < count; i++) {
+            const entry = ifd0 + 2 + i * 12;
+            if (entry + 12 > view.byteLength) break;
+
+            const tag = u16(entry);
+            const type = u16(entry + 2);
+            const valueCount = u32(entry + 4);
+
+            if (tag === 0x8769) {
+              exifIfdOffset = u32(entry + 8);
+            }
+
+            if (tag === 0x0132 && type === 2) {
+              dateOffset = valueCount <= 4 ? entry + 8 : tiffStart + u32(entry + 8);
+            }
+          }
+
+          if (exifIfdOffset) {
+            const exifIfd = tiffStart + exifIfdOffset;
+            const exifCount = u16(exifIfd);
+
+            for (let i = 0; i < exifCount; i++) {
+              const entry = exifIfd + 2 + i * 12;
+              if (entry + 12 > view.byteLength) break;
+
+              const tag = u16(entry);
+              const type = u16(entry + 2);
+              const valueCount = u32(entry + 4);
+
+              if (tag === 0x9003 && type === 2) {
+                dateOffset = valueCount <= 4 ? entry + 8 : tiffStart + u32(entry + 8);
+                break;
+              }
+            }
+          }
+
+          if (dateOffset) {
+            const bytes: number[] = [];
+            for (let i = 0; i < 19 && dateOffset + i < view.byteLength; i++) {
+              const value = view.getUint8(dateOffset + i);
+              if (value === 0) break;
+              bytes.push(value);
+            }
+
+            const raw = new TextDecoder().decode(new Uint8Array(bytes));
+            const match = raw.match(/^(\d{4}):(\d{2}):(\d{2})/);
+
+            if (match) {
+              const [, year, month, day] = match;
+              const date = new Date(Number(year), Number(month) - 1, Number(day));
+              return date.toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              });
+            }
+          }
+        }
+      }
+
+      offset += 2 + segmentLength;
+    }
+  } catch {
+    // EXIF is optional. Never block album generation because metadata is missing.
+  }
+
+  return "Date unavailable";
 }
 
 function compressImage(file: File): Promise<string> {
@@ -145,11 +270,11 @@ export default function GeneratePage() {
     setError("");
 
     const remaining =
-      5 - photos.length;
+      10 - photos.length;
 
     if (remaining <= 0) {
       setError(
-        "Maximum 5 photos allowed."
+        "Maximum 10 photos allowed."
       );
       return;
     }
@@ -164,11 +289,28 @@ export default function GeneratePage() {
         const url =
           await compressImage(file);
 
+        const exifDate =
+          await readExifDate(file);
+
+        const date =
+          exifDate !== "Date unavailable"
+            ? exifDate
+            : new Date(
+                file.lastModified
+              ).toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              });
+
         newPhotos.push({
           id: createId(),
           file,
           url,
           caption: "",
+          place: "",
+          situation: "",
+          date,
         });
       }
 
@@ -219,6 +361,7 @@ export default function GeneratePage() {
                 (photo) => ({
                   id: photo.id,
                   url: photo.url,
+                  date: photo.date,
                 })
               ),
             }),
@@ -253,6 +396,16 @@ export default function GeneratePage() {
             caption:
               result?.caption ||
               "A beautiful moment worth remembering.",
+            place:
+              result?.place ||
+              "Location unavailable",
+            situation:
+              result?.situation ||
+              "A memorable moment",
+            date:
+              result?.date ||
+              photo.date ||
+              "Date unavailable",
           };
         }
       );
@@ -542,13 +695,13 @@ export default function GeneratePage() {
                   </p>
 
                   <h2 className="mt-1 text-2xl font-black">
-                    Choose your memories
+                    Choose your memories — up to 10 photos
                   </h2>
 
                 </div>
 
                 <span className="rounded-full bg-[#e7d5c6] px-4 py-2 text-sm font-black text-[#66594f]">
-                  {photos.length}/5
+                  {photos.length}/10
                 </span>
 
               </div>
@@ -778,7 +931,7 @@ export default function GeneratePage() {
             </section>
 
             {/* =====================================
-                SCRAPBOOK COVER
+                MEMORY ALBUM COVER
             ====================================== */}
 
             <div className="mb-12 overflow-hidden rounded-[2rem] bg-white p-0 shadow-xl">
@@ -843,7 +996,7 @@ export default function GeneratePage() {
                   <div className="rotate-[2deg] bg-[#f1c6d2] px-12 py-7 shadow-[12px_14px_0_rgba(70,50,40,0.12)]">
 
                     <h1 className="font-serif text-[82px] font-black italic leading-[0.85] tracking-tight text-[#302824]">
-                      SCRAPBOOK
+                      MEMORY ALBUM
                     </h1>
 
                   </div>
@@ -1064,6 +1217,18 @@ export default function GeneratePage() {
                                 {photo.caption ||
                                   "A moment captured with love."}
                               </p>
+
+                              <div className="mx-auto mt-5 flex max-w-[540px] flex-wrap items-center justify-center gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#77685e]">
+                                <span className="rounded-full bg-white/80 px-3 py-2">
+                                  📍 {photo.place || "Location unavailable"}
+                                </span>
+                                <span className="rounded-full bg-white/80 px-3 py-2">
+                                  📅 {photo.date || "Date unavailable"}
+                                </span>
+                                <span className="rounded-full bg-white/80 px-3 py-2">
+                                  🎯 {photo.situation || "A memorable moment"}
+                                </span>
+                              </div>
 
                               <span className="font-serif text-4xl text-[#d59aab]">
                                 ”

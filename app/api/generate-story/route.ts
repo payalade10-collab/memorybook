@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 interface PhotoInput {
   id: string;
   url: string;
+  date?: string;
 }
 
 interface AnalyzedPhoto {
@@ -10,6 +11,7 @@ interface AnalyzedPhoto {
   caption: string;
   place: string;
   situation: string;
+  date: string;
 }
 
 // Keep your currently working model for now.
@@ -258,144 +260,39 @@ You are the visual intelligence system for a premium digital memory album.
 
 Look carefully at the EXACT photograph provided with this request.
 
-Analyze what is actually visible in the photograph.
+Analyze what is actually visible.
 
-Your job is to determine three things.
+IMPORTANT DATE RULE:
+The application may provide a photo date from the original image metadata.
+
+Photo date from metadata:
+${photo.date || "Date unavailable"}
+
+Do NOT invent a capture date.
+
+If the metadata date is available, use that date when creating the caption.
 
 1. PLACE
 
 Identify the visible place, landmark, environment, or setting.
-
-Examples:
-
-- Gateway of India
-- Marine Drive
-- beach
-- mountain viewpoint
-- college campus
-- restaurant
-- temple
-- garden
-- wedding venue
-- home
-- airport
-- railway station
-- city street
-- park
-- tourist attraction
-
 If a famous landmark is clearly recognizable, identify its actual name.
-
 If the exact place cannot be identified, describe the visible setting instead.
-
 NEVER invent an exact location.
 
 2. SITUATION
 
 Understand what is happening in the photograph.
-
-Examples:
-
-- friends enjoying a trip
-- family gathering
-- birthday celebration
-- sightseeing
-- graduation
-- wedding celebration
-- eating together
-- relaxing at the beach
-- posing for a photograph
-- exploring a city
-- enjoying nature
-- studying
-- travelling
-- visiting a landmark
-- attending an event
-
 Only describe what can reasonably be understood from the photograph.
-
 NEVER invent relationships, names, events, or facts that cannot be seen.
 
 3. CAPTION
 
 Create ONE beautiful, natural caption specifically for THIS photograph.
-
-The caption must be based on:
-
-PLACE + SITUATION + visible details.
-
+Use PLACE + SITUATION + DATE when a real metadata date is available.
 The caption must be between 8 and 25 words.
-
-The caption should sound like something a real person would put under their favourite photograph in a beautiful memory album.
-
-IMPORTANT:
-
-The caption MUST be specific to this photograph.
-
-Do NOT write generic captions such as:
-
-"A beautiful moment worth remembering."
-
-"A special memory."
-
-"Making memories."
-
-"A day to remember."
-
-Do NOT use the same caption structure for every photograph.
-
-If a recognizable landmark is visible, mention it naturally.
-
-If the exact place is unknown, mention the visible setting instead.
-
-If people are doing something identifiable, mention that situation.
-
-If it is a travel photograph, make it feel like a travel memory.
-
-If it is a celebration, make it feel like a celebration.
-
-If it is nature, describe the scenery naturally.
-
-If it is food, describe the food or dining situation.
-
-If it is a group photograph, describe the visible group moment.
-
-If it is architecture or landmark photography, focus on the place.
-
-Never invent:
-
-- names
-- dates
-- relationships
-- exact locations
-- events
-- facts that are not visible
-
-Examples:
-
-Gateway of India:
-
-"Standing beside Mumbai's iconic Gateway of India, capturing a beautiful moment from the city adventure."
-
-Beach:
-
-"An easygoing evening by the sea, filled with laughter, friendship, and the sound of waves."
-
-Mountain:
-
-"Taking in peaceful mountain views and enjoying a quiet escape surrounded by nature."
-
-Birthday:
-
-"Celebrating another beautiful year together, surrounded by laughter, cake, and the people who make it special."
-
-College:
-
-"College memories, new experiences, and familiar faces coming together for a memorable day."
-
-Restaurant:
-
-"Good food, warm conversations, and a relaxed evening shared around the table."
+Make it sound like a real personal memory-album caption.
+Do not use generic captions such as "A special memory." or "Making memories."
+Do not invent names, dates, relationships, exact locations, events, or invisible facts.
 
 Return ONLY valid JSON in exactly this structure:
 
@@ -518,6 +415,7 @@ Return ONLY valid JSON in exactly this structure:
       place,
       situation,
       caption,
+      date: photo.date || "Date unavailable",
     };
   } catch (error) {
     console.error(
@@ -539,6 +437,7 @@ Return ONLY valid JSON in exactly this structure:
       place: "AI analysis failed",
       situation: errorMessage,
       caption: `AI error: ${errorMessage}`,
+      date: photo.date || "Date unavailable",
     };
   }
 }
@@ -654,11 +553,11 @@ export async function POST(
       );
     }
 
-    if (photos.length > 5) {
+    if (photos.length > 10) {
       return NextResponse.json(
         {
           error:
-            "Maximum 5 photos are allowed.",
+            "Maximum 10 photos are allowed.",
         },
         {
           status: 400,

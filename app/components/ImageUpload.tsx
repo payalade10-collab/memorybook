@@ -4,7 +4,6 @@ interface ImageUploadProps {
   onImagesSelected: (files: File[]) => void;
 }
 
-
 export default function ImageUpload({
   onImagesSelected,
 }: ImageUploadProps) {
@@ -13,8 +12,8 @@ export default function ImageUpload({
 
     if (files.length === 0) return;
 
-    if (files.length > 5) {
-      alert("Maximum 5 photos allowed.");
+    if (files.length > 10) {
+      alert("Maximum 10 photos allowed.");
       e.target.value = "";
       return;
     }
@@ -33,7 +32,7 @@ export default function ImageUpload({
       />
 
       <p className="mt-3 text-sm text-gray-500">
-        Select 1 to 5 photos at once.
+        Select 1 to 10 photos at once.
       </p>
     </div>
   );
